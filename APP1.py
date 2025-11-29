@@ -13,22 +13,19 @@ st.markdown("Esta aplicación utiliza Inteligencia Artificial para estimar la de
 # 2. Carga de recursos (con caché para que sea rápido)
 @st.cache_data
 def cargar_datos():
-    # Cargar tus CSVs (Asegúrate de que estén en la misma carpeta)
+    # Cargar el CSV de consumo
     df = pd.read_csv('DAYTON_hourly.csv', index_col=0, parse_dates=True)
+    
+    # --- CORRECCIÓN CRÍTICA ---
+    # Renombramos la columna original 'DAYTON_MW' a 'Consumo_MW'
+    # para que coincida con lo que el resto del código espera.
+    if 'DAYTON_MW' in df.columns:
+        df = df.rename(columns={'DAYTON_MW': 'Consumo_MW'})
+    
+    # Cargar el clima
     clima = pd.read_csv('4177229.csv')
+    
     return df, clima
-
-@st.cache_resource
-def cargar_modelo():
-    return joblib.load('modelo_consumo_dayton.joblib')
-
-try:
-    df_main, df_clima = cargar_datos()
-    model = cargar_modelo()
-    st.success("Datos y Modelo cargados correctamente!")
-except Exception as e:
-    st.error(f"Error cargando archivos: {e}")
-    st.stop()
 
 # 3. Sidebar para Inputs del Usuario
 st.sidebar.header("Parámetros de Predicción")
