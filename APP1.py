@@ -22,10 +22,19 @@ def cargar_datos():
     if 'DAYTON_MW' in df.columns:
         df = df.rename(columns={'DAYTON_MW': 'Consumo_MW'})
     
-    # Cargar el clima
-    clima = pd.read_csv('4177229.csv')
+    # --- INICIO DEL BLOQUE DE CARGA ---
+try:
+    # Aquí llamamos a la función y guardamos el resultado en 'df_main'
+    df_main, df_clima = cargar_datos()
     
-    return df, clima
+    # Cargamos el modelo
+    model = cargar_modelo()
+    
+    st.success("Datos y Modelo cargados correctamente!")
+except Exception as e:
+    st.error(f"Error cargando archivos: {e}")
+    st.stop()
+# --- FIN DEL BLOQUE DE CARGA ---#
 
 # 3. Sidebar para Inputs del Usuario
 st.sidebar.header("Parámetros de Predicción")
