@@ -6,56 +6,59 @@ import matplotlib.pyplot as plt
 
 # 1. Configuración de la página
 st.set_page_config(page_title="Predicción Energía Dayton", layout="wide")
-
 st.title("⚡ Predicción de Consumo Eléctrico - Dayton, Ohio")
-st.markdown("Esta aplicación utiliza Inteligencia Artificial para estimar la demanda eléctrica basada en el clima y la fecha.")
 
-# 2. Carga de recursos (con caché para que sea rápido)
+# 2. Funciones de Carga (Con caché para velocidad)
 @st.cache_data
 def cargar_datos():
-    # Cargar el CSV de consumo
+    # Cargar CSV de consumo
     df = pd.read_csv('DAYTON_hourly.csv', index_col=0, parse_dates=True)
     
-    # --- CORRECCIÓN CRÍTICA ---
-    # Renombramos la columna original 'DAYTON_MW' a 'Consumo_MW'
-    # para que coincida con lo que el resto del código espera.
+    # Renombrar columna si es necesario (Corrección clave)
     if 'DAYTON_MW' in df.columns:
         df = df.rename(columns={'DAYTON_MW': 'Consumo_MW'})
     
-    # --- INICIO DEL BLOQUE DE CARGA ---
-try:
-    # Aquí llamamos a la función y guardamos el resultado en 'df_main'
-    df_main, df_clima = cargar_datos()
+    # Cargar CSV de clima
+    clima = pd.read_csv('4177229.csv')
     
-    # Cargamos el modelo
-    model = cargar_modelo()
-    
-    st.success("Datos y Modelo cargados correctamente!")
-except Exception as e:
-    st.error(f"Error cargando archivos: {e}")
-    st.stop()
-# --- FIN DEL BLOQUE DE CARGA ---#
+    # ¡IMPORTANTE! Esta línea devuelve los datos al programa principal
+    return df, clima
 
-# 3. Sidebar para Inputs del Usuario
+@st.cache_resource
+def cargar_modelo():
+    # Intenta cargar con el nombre que usaste en el notebook
+    try:
+        return joblib.load('modelo_demanda_final.joblib')
+    except:
+        # Si falla, intenta con el otro nombre posible
+        return joblib.load('modelo_consumo_dayton.joblib')
+
+# 3. Bloque Principal de Carga de Datos
+try:
+    # Llamamos a las funciones y guardamos los datos en variables
+    df_main, df_clima = cargar_datos()
+    model = cargar_modelo()
+    st.success("¡Sistema listo! Datos cargados.")
+except Exception as e:
+    # Si algo falla, mostramos el error detallado
+    st.error(f"Error crítico cargando archivos: {e}")
+    st.info("Por favor verifica que los archivos .csv y .joblib estén subidos en GitHub.")
+    st.stop()
+
+# 4. Interfaz de Usuario (Sidebar)
 st.sidebar.header("Parámetros de Predicción")
 
-# El usuario elige una fecha y hora futura o hipotética
 fecha_input = st.sidebar.date_input("Seleccionar Fecha")
 hora_input = st.sidebar.slider("Seleccionar Hora (0-23)", 0, 23, 12)
-temp_input = st.sidebar.number_input("Temperatura Promedio (°C)", value=15.0, step=0.5)
+temp_input = st.sidebar.number_input("Temperatura Promedio (°C)", value=15.0)
+consumo_previo = st.sidebar.number_input("Consumo Hora Anterior (MW)", value=2000.0)
 
-# Input importante: El consumo de la hora anterior (Lag)
-# En una app real esto se automatizaría, pero aquí lo pedimos manual o ponemos un default
-consumo_previo = st.sidebar.number_input("Consumo Hora Anterior (MW)", value=2000.0, step=10.0)
-
-# 4. Lógica de Predicción
+# 5. Botón y Lógica de Predicción
 if st.sidebar.button("Calcular Predicción"):
-    # Crear un pequeño dataframe con los datos de entrada
-    # IMPORTANTE: Debe tener las mismas columnas que usaste para entrenar (X)
-    
-    # Reconstruimos las features de fecha
+    # Reconstruir fecha para extraer características
     fecha_completa = pd.to_datetime(f"{fecha_input} {hora_input}:00:00")
     
+    # Crear dataframe de entrada con las mismas columnas del entrenamiento
     input_data = pd.DataFrame({
         'hora': [hora_input],
         'dia_semana': [fecha_completa.dayofweek],
@@ -67,18 +70,24 @@ if st.sidebar.button("Calcular Predicción"):
         'TAVG': [temp_input]
     })
 
-    # Predecir
-    prediccion = model.predict(input_data)[0]
+    try:
+        # Si el modelo es un pipeline, él se encarga de escalar si es necesario
+        prediccion = model.predict(input_data)[0]
 
-    # 5. Mostrar Resultados
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.metric(label="⚡ Demanda Predicha", value=f"{prediccion:.2f} MW")
-    
-    with col2:
-        st.info(f"Fecha: {fecha_completa}\n\nTemp: {temp_input}°C")
+        # Mostrar resultados
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric(label="⚡ Demanda Estimada", value=f"{prediccion:.2f} MW")
+        with col2:
+            st.info(f"Detalles:\n- Fecha: {fecha_completa}\n- Temp: {temp_input}°C")
+            
+    except Exception as e:
+        st.error(f"Error al predecir: {e}")
 
-# 6. Visualización de datos históricos (Contexto)
-st.subheader("Tendencia Histórica de Consumo")
-st.line_chart(df_main['Consumo_MW'].tail(500))  # Muestra las últimas 500 horas reales
+# 6. Gráfico Histórico (Verificación final)
+st.subheader("Tendencia Reciente de Consumo Real")
+try:
+    # Graficamos los últimos 500 datos para no sobrecargar
+    st.line_chart(df_main['Consumo_MW'].tail(500))
+except Exception as e:
+    st.warning(f"No se pudo generar el gráfico: {e}")
